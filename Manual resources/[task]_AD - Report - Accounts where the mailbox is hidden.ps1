@@ -1,3 +1,7 @@
+$VerbosePreference = "SilentlyContinue"
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
 $exportReport = $form.exportReport
 
 try {
