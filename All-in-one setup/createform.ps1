@@ -21,7 +21,7 @@ $tmpName = @'
 AdUsersReportOu
 '@ 
 $tmpValue = @'
-AdUsersReportOu
+OU=Users,OU=HelloID,DC=enyoi,DC=local;OU=Users,OU=HelloID Training,DC=enyoi,DC=local;OU=Disabled users,OU=HelloID Training,DC=enyoi,DC=local
 '@ 
 $globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False"});
 
@@ -324,11 +324,11 @@ foreach ($item in $globalHelloIDVariables) {
 
 
 <# Begin: HelloID Data sources #>
-<# Begin: DataSource "report-ad-users-mailbox-hidden | AD-Get-Users-Mailbox-Hidden" #>
+<# Begin: DataSource "report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden" #>
 $tmpPsScript = @'
 #######################################################################
 # Template: HelloID SA Powershell data source
-# Name: report-ad-users-mailbox-hidden | AD-Get-Users-Mailbox-Hidden
+# Name: report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden
 # Date: 23-02-2026
 #######################################################################
 
@@ -397,10 +397,10 @@ $tmpInput = @'
 '@ 
 $dataSourceGuid_0 = [PSCustomObject]@{} 
 $dataSourceGuid_0_Name = @'
-report-ad-users-mailbox-hidden | AD-Get-Users-Mailbox-Hidden
+report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden
 '@ 
 Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_0_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -DataSourceRunInCloud "False" -returnObject ([Ref]$dataSourceGuid_0) 
-<# End: DataSource "report-ad-users-mailbox-hidden | AD-Get-Users-Mailbox-Hidden" #>
+<# End: DataSource "report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden" #>
 <# End: HelloID Data sources #>
 
 <# Begin: Dynamic Form "Report - AD users with hidden mailbox" #>
