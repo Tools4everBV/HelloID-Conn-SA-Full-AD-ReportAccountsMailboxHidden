@@ -5,7 +5,7 @@
                             },
         "type":  "markdown",
         "summaryVisibility":  "Show",
-        "body":  "The following report will show local AD accounts where the Exchange Mailbox is hidden. Please wait while the data is loading...",
+        "body":  "The following report will show local AD accounts where the Exchange Mailbox is hidden. Please wait while the data is loading...\n\nAfter loading, you can use the download button to download the report to CSV.",
         "requiresTemplateOptions":  false,
         "requiresKey":  false,
         "requiresDataSource":  false
