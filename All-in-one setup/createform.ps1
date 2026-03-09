@@ -1,12 +1,13 @@
 # Set TLS to accept TLS, TLS 1.1 and TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
+
 #HelloID variables
 #Note: when running this script inside HelloID; portalUrl and API credentials are provided automatically (generate and save API credentials first in your admin panel!)
 $portalUrl = "https://CUSTOMER.helloid.com"
 $apiKey = "API_KEY"
 $apiSecret = "API_SECRET"
 $delegatedFormAccessGroupNames = @("") #Only unique names are supported. Groups must exist!
-$delegatedFormCategories = @("Reporting","Active Directory") #Only unique names are supported. Categories will be created if not exists
+$delegatedFormCategories = @("Active Directory","Reporting") #Only unique names are supported. Categories will be created if not exists
 $script:debugLogging = $false #Default value: $false. If $true, the HelloID resource GUIDs will be shown in the logging
 $script:duplicateForm = $false #Default value: $false. If $true, the HelloID resource names will be changed to import a duplicate Form
 $script:duplicateFormSuffix = "_tmp" #the suffix will be added to all HelloID resource names to generate a duplicate form with different resource names
@@ -15,27 +16,19 @@ $script:duplicateFormSuffix = "_tmp" #the suffix will be added to all HelloID re
 #NOTE: You can also update the HelloID Global variable values afterwards in the HelloID Admin Portal: https://<CUSTOMER>.helloid.com/admin/variablelibrary
 $globalHelloIDVariables = [System.Collections.Generic.List[object]]@();
 
-#Global variable #1 >> ADusersReportOU
+#Global variable #1 >> AdReportSearchOu
 $tmpName = @'
-ADusersReportOU
+AdReportSearchOu
 '@ 
 $tmpValue = @'
-[{ "OU": "OU=Users,OU=HelloID Training,DC=veeken,DC=local"},{"OU": "OU=Disabled Users,OU=HelloID Training,DC=veeken,DC=local"}]
-'@ 
-$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False"});
-
-#Global variable #2 >> HIDreportFolder
-$tmpName = @'
-HIDreportFolder
-'@ 
-$tmpValue = @'
-C:\HIDreports\
+OU=Users,OU=HelloID,DC=enyoi,DC=local;OU=Users,OU=HelloID Training,DC=enyoi,DC=local;OU=Disabled users,OU=HelloID Training,DC=enyoi,DC=local
 '@ 
 $globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False"});
 
 
 #make sure write-information logging is visual
 $InformationPreference = "continue"
+
 # Check for prefilled API Authorization header
 if (-not [string]::IsNullOrEmpty($portalApiBasic)) {
     $script:headers = @{"authorization" = $portalApiBasic}
@@ -49,6 +42,7 @@ if (-not [string]::IsNullOrEmpty($portalApiBasic)) {
     $script:headers = @{"authorization" = $Key}
     Write-Information "Using manual API credentials"
 }
+
 # Check for prefilled PortalBaseURL
 if (-not [string]::IsNullOrEmpty($portalBaseUrl)) {
     $script:PortalBaseUrl = $portalBaseUrl
@@ -57,8 +51,10 @@ if (-not [string]::IsNullOrEmpty($portalBaseUrl)) {
     $script:PortalBaseUrl = $portalUrl
     Write-Information "Using manual PortalURL: $script:PortalBaseUrl"
 }
+
 # Define specific endpoint URI
 $script:PortalBaseUrl = $script:PortalBaseUrl.trim("/") + "/"  
+
 # Make sure to reveive an empty array using PowerShell Core
 function ConvertFrom-Json-WithEmptyArray([string]$jsonString) {
     # Running in PowerShell Core?
@@ -70,13 +66,16 @@ function ConvertFrom-Json-WithEmptyArray([string]$jsonString) {
         return ,$r  # Force return value to be an array using a comma
     }
 }
+
 function Invoke-HelloIDGlobalVariable {
     param(
         [parameter(Mandatory)][String]$Name,
         [parameter(Mandatory)][String][AllowEmptyString()]$Value,
         [parameter(Mandatory)][String]$Secret
     )
+
     $Name = $Name + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
+
     try {
         $uri = ($script:PortalBaseUrl + "api/v1/automation/variables/named/$Name")
         $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
@@ -94,6 +93,7 @@ function Invoke-HelloIDGlobalVariable {
             $uri = ($script:PortalBaseUrl + "api/v1/automation/variable")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
             $variableGuid = $response.automationVariableGuid
+
             Write-Information "Variable '$Name' created$(if ($script:debugLogging -eq $true) { ": " + $variableGuid })"
         } else {
             $variableGuid = $response.automationVariableGuid
@@ -103,6 +103,7 @@ function Invoke-HelloIDGlobalVariable {
         Write-Error "Variable '$Name', message: $_"
     }
 }
+
 function Invoke-HelloIDAutomationTask {
     param(
         [parameter(Mandatory)][String]$TaskName,
@@ -116,6 +117,7 @@ function Invoke-HelloIDAutomationTask {
     )
     
     $TaskName = $TaskName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
+
     try {
         $uri = ($script:PortalBaseUrl +"api/v1/automationtasks?search=$TaskName&container=$AutomationContainer")
         $responseRaw = (Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false) 
@@ -123,6 +125,7 @@ function Invoke-HelloIDAutomationTask {
     
         if([string]::IsNullOrEmpty($response.automationTaskGuid) -or $ForceCreateTask -eq $true) {
             #Create Task
+
             $body = @{
                 name                = $TaskName;
                 useTemplate         = $UseTemplate;
@@ -136,6 +139,7 @@ function Invoke-HelloIDAutomationTask {
             $uri = ($script:PortalBaseUrl +"api/v1/automationtasks/powershell")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
             $taskGuid = $response.automationTaskGuid
+
             Write-Information "Powershell task '$TaskName' created$(if ($script:debugLogging -eq $true) { ": " + $taskGuid })"
         } else {
             #Get TaskGUID
@@ -145,8 +149,10 @@ function Invoke-HelloIDAutomationTask {
     } catch {
         Write-Error "Powershell task '$TaskName', message: $_"
     }
+
     $returnObject.Value = $taskGuid
 }
+
 function Invoke-HelloIDDatasource {
     param(
         [parameter(Mandatory)][String]$DatasourceName,
@@ -156,9 +162,12 @@ function Invoke-HelloIDDatasource {
         [parameter()][String][AllowEmptyString()]$DatasourcePsScript,        
         [parameter()][String][AllowEmptyString()]$DatasourceInput,
         [parameter()][String][AllowEmptyString()]$AutomationTaskGuid,
+        [parameter()][String][AllowEmptyString()]$DatasourceRunInCloud,
         [parameter(Mandatory)][Ref]$returnObject
     )
+
     $DatasourceName = $DatasourceName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
+
     $datasourceTypeName = switch($DatasourceType) { 
         "1" { "Native data source"; break} 
         "2" { "Static data source"; break} 
@@ -180,6 +189,7 @@ function Invoke-HelloIDDatasource {
                 value              = (ConvertFrom-Json-WithEmptyArray($DatasourceStaticValue));
                 script             = $DatasourcePsScript;
                 input              = (ConvertFrom-Json-WithEmptyArray($DatasourceInput));
+                runInCloud         = $DatasourceRunInCloud;
             }
             $body = ConvertTo-Json -InputObject $body -Depth 100
       
@@ -196,8 +206,10 @@ function Invoke-HelloIDDatasource {
     } catch {
       Write-Error "$datasourceTypeName '$DatasourceName', message: $_"
     }
+
     $returnObject.Value = $datasourceGuid
 }
+
 function Invoke-HelloIDDynamicForm {
     param(
         [parameter(Mandatory)][String]$FormName,
@@ -206,6 +218,7 @@ function Invoke-HelloIDDynamicForm {
     )
     
     $FormName = $FormName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
+
     try {
         try {
             $uri = ($script:PortalBaseUrl +"api/v1/forms/$FormName")
@@ -234,8 +247,11 @@ function Invoke-HelloIDDynamicForm {
     } catch {
         Write-Error "Dynamic form '$FormName', message: $_"
     }
+
     $returnObject.Value = $formGuid
 }
+
+
 function Invoke-HelloIDDelegatedForm {
     param(
         [parameter(Mandatory)][String]$DelegatedFormName,
@@ -249,6 +265,7 @@ function Invoke-HelloIDDelegatedForm {
     )
     $delegatedFormCreated = $false
     $DelegatedFormName = $DelegatedFormName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
+
     try {
         try {
             $uri = ($script:PortalBaseUrl +"api/v1/delegatedforms/$DelegatedFormName")
@@ -280,6 +297,7 @@ function Invoke-HelloIDDelegatedForm {
             $delegatedFormGuid = $response.delegatedFormGUID
             Write-Information "Delegated form '$DelegatedFormName' created$(if ($script:debugLogging -eq $true) { ": " + $delegatedFormGuid })"
             $delegatedFormCreated = $true
+
             $bodyCategories = $Categories
             $uri = ($script:PortalBaseUrl +"api/v1/delegatedforms/$delegatedFormGuid/categories")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $bodyCategories
@@ -292,9 +310,11 @@ function Invoke-HelloIDDelegatedForm {
     } catch {
         Write-Error "Delegated form '$DelegatedFormName', message: $_"
     }
+
     $returnObject.value.guid = $delegatedFormGuid
     $returnObject.value.created = $delegatedFormCreated
 }
+
 
 <# Begin: HelloID Global Variables #>
 foreach ($item in $globalHelloIDVariables) {
@@ -304,15 +324,48 @@ foreach ($item in $globalHelloIDVariables) {
 
 
 <# Begin: HelloID Data sources #>
-<# Begin: DataSource "AD-user-generate-table-report-mailbox-hidden" #>
+<# Begin: DataSource "report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden" #>
 $tmpPsScript = @'
+#######################################################################
+# Template: HelloID SA Powershell data source
+# Name: report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden
+# Date: 23-02-2026
+#######################################################################
+
+# For basic information about powershell data sources see:
+# https://docs.helloid.com/en/service-automation/dynamic-forms/data-sources/powershell-data-sources.html
+
+# Service automation variables:
+# https://docs.helloid.com/en/service-automation/service-automation-variables.html
+
+#region init
+
+$VerbosePreference = "SilentlyContinue"
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
+# global variables (Automation --> Variable library):
+$searchOUs = $AdUsersReportOu
+
+# variables configured in form:
+# $formValue1 = $datasource.<formElementKey>.<value>
+# $formValue2 = $datasource.<formElementKey>
+
+#endregion init
+
+#region functions
+
+#endregion functions
+
+#region lookup
 try {
+    $actionMessage = "querying AD for users with hidden mailbox"
     $filter = {msExchHideFromAddressLists -eq $true}
-    $properties = "CanonicalName", "Displayname", "UserPrincipalName", "SamAccountName", "Department", "Title", "Enabled"
+    $properties = "CanonicalName", "Displayname", "UserPrincipalName", "Department", "Title", "Enabled"
     
-    $ous = $ADusersReportOU | ConvertFrom-Json
+    $ous = $searchOUs -split ';'
     $result = foreach($item in $ous) {
-        Get-ADUser -Filter $filter -SearchBase $item.ou -Properties $properties
+        Get-ADUser -Filter $filter -SearchBase $item -Properties $properties
     } 
 
     $resultCount = @($result).Count
@@ -322,7 +375,7 @@ try {
     
     if($resultCount -gt 0){
         foreach($r in $result){
-            $returnObject = @{CanonicalName=$r.CanonicalName; Displayname=$r.Displayname; UserPrincipalName=$r.UserPrincipalName; SamAccountName=$r.SamAccountName; Department=$r.Department; Title=$r.Title; Enabled=$r.Enabled;}
+            $returnObject = @{CanonicalName=$r.CanonicalName; Displayname=$r.Displayname; UserPrincipalName=$r.UserPrincipalName; Department=$r.Department; Title=$r.Title; Enabled=$r.Enabled;}
             Write-output $returnObject
         }
     } else {
@@ -330,32 +383,34 @@ try {
     }
     
 } catch {
-    Write-error "Error generating report. Error: $($_.Exception.Message)"
-    return
+    $ex = $PSItem
+    Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    Write-Error "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    # exit # use when using multiple try/catch and the script must stop
 }
 '@ 
 $tmpModel = @'
-[{"key":"Enabled","type":0},{"key":"SamAccountName","type":0},{"key":"Title","type":0},{"key":"Department","type":0},{"key":"Displayname","type":0},{"key":"UserPrincipalName","type":0},{"key":"CanonicalName","type":0}]
+[{"key":"Enabled","type":0},{"key":"Title","type":0},{"key":"Department","type":0},{"key":"Displayname","type":0},{"key":"UserPrincipalName","type":0},{"key":"CanonicalName","type":0}]
 '@ 
 $tmpInput = @'
 []
 '@ 
 $dataSourceGuid_0 = [PSCustomObject]@{} 
 $dataSourceGuid_0_Name = @'
-AD-user-generate-table-report-mailbox-hidden
+report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden
 '@ 
-Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_0_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -returnObject ([Ref]$dataSourceGuid_0) 
-<# End: DataSource "AD-user-generate-table-report-mailbox-hidden" #>
+Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_0_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -DataSourceRunInCloud "False" -returnObject ([Ref]$dataSourceGuid_0) 
+<# End: DataSource "report-ad-users-with-hidden-mailbox | AD-Get-Users-Mailbox-Hidden" #>
 <# End: HelloID Data sources #>
 
-<# Begin: Dynamic Form "AD - Report - Accounts where the mailbox is hidden" #>
+<# Begin: Dynamic Form "Report - AD users with hidden mailbox" #>
 $tmpSchema = @"
-[{"templateOptions":{},"type":"markdown","summaryVisibility":"Show","body":"The following report will show local AD accounts where the Exchange Mailbox is hidden. Please wait while the data is loading...","requiresTemplateOptions":false},{"key":"grid","templateOptions":{"label":"Results","grid":{"columns":[{"headerName":"CanonicalName","field":"CanonicalName"},{"headerName":"Displayname","field":"Displayname"},{"headerName":"UserPrincipalName","field":"UserPrincipalName"},{"headerName":"Department","field":"Department"},{"headerName":"Title","field":"Title"},{"headerName":"Enabled","field":"Enabled"}],"height":500,"rowSelection":"single"},"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_0","input":{"propertyInputs":[]}},"useFilter":true,"useDefault":false},"type":"grid","summaryVisibility":"Hide element","requiresTemplateOptions":true},{"key":"exportReport","templateOptions":{"label":"Export report (local export on HelloID Agent server)","useSwitch":true,"checkboxLabel":"Yes","mustBeTrue":true},"type":"boolean","summaryVisibility":"Show","requiresTemplateOptions":true}]
+[{"templateOptions":{},"type":"markdown","summaryVisibility":"Show","body":"The following report will show local AD accounts where the Exchange Mailbox is hidden. Please wait while the data is loading...\n\nAfter loading, you can use the download button to download the report to CSV.","requiresTemplateOptions":false,"requiresKey":false,"requiresDataSource":false},{"key":"grid","templateOptions":{"label":"Results","grid":{"columns":[{"headerName":"CanonicalName","field":"CanonicalName"},{"headerName":"Displayname","field":"Displayname"},{"headerName":"UserPrincipalName","field":"UserPrincipalName"},{"headerName":"Department","field":"Department"},{"headerName":"Title","field":"Title"},{"headerName":"Enabled","field":"Enabled"}],"height":500,"rowSelection":"single"},"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_0","input":{"propertyInputs":[]}},"useFilter":true,"useDefault":false,"allowCsvDownload":true},"type":"grid","summaryVisibility":"Hide element","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":true},{"key":"textInput","templateOptions":{"label":"Reporting only","required":true,"minLength":1,"readonly":true},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false}]
 "@ 
 
 $dynamicFormGuid = [PSCustomObject]@{} 
 $dynamicFormName = @'
-AD - Report - Accounts where the mailbox is hidden
+Report - AD users with hidden mailbox
 '@ 
 Invoke-HelloIDDynamicForm -FormName $dynamicFormName -FormSchema $tmpSchema  -returnObject ([Ref]$dynamicFormGuid) 
 <# END: Dynamic Form #>
@@ -379,6 +434,7 @@ if(-not[String]::IsNullOrEmpty($delegatedFormAccessGroupNames)){
         $delegatedFormAccessGroupGuids = ($delegatedFormAccessGroupGuids | Select-Object -Unique | ConvertTo-Json -Depth 100 -Compress)
     }
 }
+
 $delegatedFormCategoryGuids = @()
 foreach($category in $delegatedFormCategories) {
     try {
@@ -396,10 +452,12 @@ foreach($category in $delegatedFormCategories) {
             name = @{"en" = $category};
         }
         $body = ConvertTo-Json -InputObject $body -Depth 100
+
         $uri = ($script:PortalBaseUrl +"api/v1/delegatedformcategories")
         $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
         $tmpGuid = $response.delegatedFormCategoryGuid
         $delegatedFormCategoryGuids += $tmpGuid
+
         Write-Information "HelloID Delegated Form category '$category' successfully created$(if ($script:debugLogging -eq $true) { ": " + $tmpGuid })"
     }
 }
@@ -409,12 +467,12 @@ $delegatedFormCategoryGuids = (ConvertTo-Json -InputObject $delegatedFormCategor
 <# Begin: Delegated Form #>
 $delegatedFormRef = [PSCustomObject]@{guid = $null; created = $null} 
 $delegatedFormName = @'
-AD - Report - Accounts where the mailbox is hidden
+Report - AD users with hidden mailbox
 '@
 $tmpTask = @'
-{"name":"AD - Report - Accounts where the mailbox is hidden","script":"$VerbosePreference = \"SilentlyContinue\"\r\n$InformationPreference = \"Continue\"\r\n$WarningPreference = \"Continue\"\r\n\r\n$exportReport = $form.exportReport\r\n\r\ntry {\r\n    if($exportReport -eq \"True\") {\r\n        ## export file properties\r\n        if($HIDreportFolder.EndsWith(\"\\\") -eq $false){\r\n            $HIDreportFolder = $HIDreportFolder + \"\\\"\r\n        }\r\n        \r\n        $timeStamp = $(get-date -f yyyyMMddHHmmss)\r\n        $exportFile = $HIDreportFolder + \"Report_AD_AccountsMailboxHidden_\" + $timeStamp + \".csv\"\r\n        \r\n        ## Report details\r\n        $filter = {msExchHideFromAddressLists -eq $true}\r\n        $properties = \"CanonicalName\", \"Displayname\", \"UserPrincipalName\", \"SamAccountName\", \"Department\", \"Title\", \"Enabled\"\r\n    \r\n        $ous = $ADusersReportOU | ConvertFrom-Json\r\n        $result = foreach($item in $ous) {\r\n            Get-ADUser -Filter $filter -SearchBase $item.ou -Properties $properties\r\n        }\r\n        $resultCount = @($result).Count\r\n        $result = $result | Sort-Object -Property Displayname\r\n        \r\n        ## export details\r\n        $exportData = @()\r\n        if($resultCount -gt 0){\r\n            foreach($r in $result){\r\n                $exportData += [pscustomobject]@{\r\n                    \"CanonicalName\" = $r.CanonicalName;\r\n                    \"Displayname\" = $r.Displayname;\r\n                    \"UserPrincipalName\" = $r.UserPrincipalName;\r\n                    \"SamAccountName\" = $r.SamAccountName;\r\n                    \"Department\" = $r.Department;\r\n                    \"Title\" = $r.Title;\r\n                    \"Enabled\" = $r.Enabled;\r\n                }\r\n            }\r\n        }\r\n        \r\n        $exportCount = @($exportData).Count\r\n        Write-Information \"Export row count: $exportCount\"\r\n        \r\n        $exportData = $exportData | Sort-Object -Property productName, userName\r\n        $exportData | Export-Csv -Path $exportFile -Delimiter \";\" -NoTypeInformation\r\n        \r\n        Write-Information \"Report [$exportFile] containing $exportCount records created successfully\"\r\n        $Log = @{\r\n            Action            = \"Undefined\" # optional. ENUM (undefined = default) \r\n            System            = \"ActiveDirectory\" # optional (free format text) \r\n            Message           = \"Report [$exportFile] containing $exportCount records created successfully\" # required (free format text) \r\n            IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n            TargetDisplayName = $exportFile # optional (free format text) \r\n            TargetIdentifier  = \"\" # optional (free format text) \r\n        }\r\n        #send result back  \r\n        Write-Information -Tags \"Audit\" -MessageData $log\r\n    }\r\n} catch {\r\n    Write-Error \"Error generating report. Error: $($_.Exception.Message)\"\r\n    $Log = @{\r\n        Action            = \"Undefined\" # optional. ENUM (undefined = default) \r\n        System            = \"ActiveDirectory\" # optional (free format text) \r\n        Message           = \"Error generating report [$exportFile]\" # required (free format text) \r\n        IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $exportFile # optional (free format text) \r\n        TargetIdentifier  = \"\" # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}","runInCloud":false}
+{"name":"Report - AD users with hidden mailbox","script":"# No tasks are performed","runInCloud":false}
 '@ 
 
-Invoke-HelloIDDelegatedForm -DelegatedFormName $delegatedFormName -DynamicFormGuid $dynamicFormGuid -AccessGroups $delegatedFormAccessGroupGuids -Categories $delegatedFormCategoryGuids -UseFaIcon "True" -FaIcon "fa fa-info-circle" -task $tmpTask -returnObject ([Ref]$delegatedFormRef) 
+Invoke-HelloIDDelegatedForm -DelegatedFormName $delegatedFormName -DynamicFormGuid $dynamicFormGuid -AccessGroups $delegatedFormAccessGroupGuids -Categories $delegatedFormCategoryGuids -UseFaIcon "True" -FaIcon "fa fa-list" -task $tmpTask -returnObject ([Ref]$delegatedFormRef) 
 <# End: Delegated Form #>
 
